@@ -1,0 +1,55 @@
+#!/usr/bin/python
+#coding: utf-8
+# +-------------------------------------------------------------------
+# | 宝塔Linux面板 
+# +-------------------------------------------------------------------
+# | Copyright (c) 2015-2099 宝塔软件(http://bt.cn) All rights reserved.
+# +-------------------------------------------------------------------
+# | Author: 黄文良 <287962566@qq.com>
+# +-------------------------------------------------------------------
+from gevent import monkey
+monkey.patch_all()
+import os,ssl
+os.chdir('/www/server/panel')
+from BTPanel import app,sys
+
+if __name__ == '__main__':
+    f = open('data/port.pl')
+    PORT = int(f.read())
+    HOST = '0.0.0.0'
+    if os.path.exists('data/ipv6.pl'):
+        HOST = "0:0:0:0:0:0:0:0"
+    f.close()
+
+    #app.threaded=True
+    #app.jinja_env.auto_reload = True
+
+    from  gevent.pywsgi import WSGIServer
+    from geventwebsocket.handler import WebSocketHandler
+    
+    keyfile = 'ssl/privateKey.pem'
+    certfile = 'ssl/certificate.pem'
+    is_ssl = False
+    if os.path.exists('data/ssl.pl') and os.path.exists(keyfile) and os.path.exists(certfile):
+        is_ssl = True
+    if os.path.exists('data/debug.pl'):
+        ssl_context = None
+        if is_ssl: ssl_context=(certfile,keyfile)
+        app.run(host=HOST,port=PORT,threaded=True,debug=True,ssl_context=ssl_context)
+    else:
+        if is_ssl:
+            my_ssl = {
+                'certfile': certfile,
+                'keyfile': keyfile,
+                'ciphers': 'ECDHE-RSA-AES128-GCM-SHA256:HIGH:!aNULL:!MD5:!RC4:!DHE',
+                'ssl_version':ssl.OP_NO_SSLv3,
+                'suppress_ragged_eofs':False
+            }
+            ssl_context = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
+            ssl_context.load_cert_chain(certfile=certfile,keyfile=keyfile)
+            ssl_context.options &= ~ssl.OP_NO_SSLv3
+
+            http_server = WSGIServer((HOST, PORT), app,handler_class=WebSocketHandler,ssl_context = ssl_context)
+        else:
+            http_server = WSGIServer((HOST, PORT), app,handler_class=WebSocketHandler)
+        http_server.serve_forever()

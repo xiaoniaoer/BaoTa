@@ -15,9 +15,9 @@
                 <iframe name='hid' id="hid" style="display:none"></iframe>
             </div>
         </div>
-        <div class="conter-box bgw mtb15 pd15">
+        <div class="bgw mtb15 pd15">
             <div class="info-title-tips">
-                <p><span class="glyphicon glyphicon-alert" style="color: #f39c12; margin-right: 10px;"></span> {{data['lan']['PS']}}</p>
+                <p><span class="glyphicon glyphicon-alert" style="color: #f39c12; margin-right: 10px;"></span> {{data['lan']['PS']}}建站成功后，请在<a class="btlink" href="/crontab">[计划任务]</a>页面添加定时备份任务!</p>
             </div>
             <button onclick="site.add_site()" class="btn btn-success btn-sm btn-title" type="button">{{data['lan']['BTN1']}}</button>&nbsp;
             <button onclick="site.set_default_page()" class="btn btn-default btn-sm btn-title" type="button">{{data['lan']['BTN2']}}</button>
@@ -48,7 +48,7 @@
 {% block scripts %}
 <script type="text/javascript" src="/static/laydate/laydate.js?date=20180301"></script>
 <script type="text/javascript" src="/static/js/bootstrap-select.min.js"></script>
-<script type="text/javascript" src="/static/js/site.js?version_new={{g['version']}}"></script>
+<script type="text/javascript" src="/static/js/site.js?version_20200106={{g['version']}}"></script>
 <script type="text/javascript">
     bt.set_cookie('sites_path', "{{session['config']['sites_path']}}");
     bt.set_cookie('serverType', "{{session['webserver']}}");

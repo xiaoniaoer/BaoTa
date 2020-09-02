@@ -145,7 +145,7 @@ var index = {
                     crs += 'CPU-' + i + ": " + d[2][i] + '%' + (n1 % 2 == 0?'</br>':' | ');
                     
                 }
-                layer.tips(d[3] +"</br>"+ crs, _this.find('.cicle'), { time: 0, tips: [1, '#999'] });
+                layer.tips(d[3] + "</br>" + d[5] + "个物理CPU，" + (d[5] * d[4]) + "个物理核心，" + d[1]+"线程</br>"+ crs, _this.find('.cicle'), { time: 0, tips: [1, '#999'] });
             }, function () {
                 layer.closeAll('tips');
             });
@@ -230,7 +230,7 @@ var index = {
             var load_arr = [{ title: '运行堵塞', val: 100, color: '#dd2f00' }, { title: '运行缓慢', val: 90, color: '#ff9900' }, { title: '运行正常', val: 70, color: '#20a53a' }, { title: '运行流畅', val: 30, color: '#20a53a' }];
             var _cpubox = $('.cpubox'), _membox = $('.membox'), _loadbox = $('.loadbox')
 
-            index.set_val(_cpubox, { usage: net.cpu[0], title: net.cpu[1] + ' ' + lan.index.cpu_core, items: pub_arr })
+            index.set_val(_cpubox, { usage: net.cpu[0], title: net.cpu[1]+' 核心', items: pub_arr })
             index.set_val(_membox, { usage: (net.mem.memRealUsed * 100 / net.mem.memTotal).toFixed(1), items: pub_arr, title: net.mem.memRealUsed + '/' + net.mem.memTotal + '(MB)' })
             bt.set_cookie('memSize', net.mem.memTotal)
 
@@ -261,6 +261,11 @@ var index = {
             if (info.isuser > 0) {
                 $("#messageError").show();
                 $("#messageError").append('<p><span class="glyphicon glyphicon-alert" style="color: #ff4040; margin-right: 10px;"></span>' + lan.index.user_warning + '<span class="c7 mr5" title="此安全问题不可忽略，请尽快处理" style="cursor:no-drop"> [不可忽略]</span><a class="btlink" href="javascript:setUserName();"> [立即修改]</a></p>')
+            }
+
+            if (info.isport === true) {
+                $("#messageError").show();
+                $("#messageError").append('<p><span class="glyphicon glyphicon-alert" style="color: #ff4040; margin-right: 10px;"></span>当前面板使用的是默认端口[8888]，有安全隐患，请到面板设置中修改面板端口!<span class="c7 mr5" title="此安全问题不可忽略，请尽快处理" style="cursor:no-drop"> [不可忽略]</span><a class="btlink" href="/config"> [立即修改]</a></p>')
             }
             var _system = info.system;
             $("#info").html(_system);
@@ -297,11 +302,16 @@ var index = {
                     obj.rate = item.size[3].replace('%', '');
                     obj.free = item.size[2];
                     var arr = [];
-                    arr.push({ title: 'Inode信息', value: '' })
+                    arr.push({ title: '<b>Inode信息</b>', value: '' })
                     arr.push({ title: '总数', value: item.inodes[0] })
-                    arr.push({ title: '已使用', value: item.inodes[1] })
+                    arr.push({ title: '已用', value: item.inodes[1] })
                     arr.push({ title: '可用', value: item.inodes[2] })
                     arr.push({ title: 'Inode使用率', value: item.inodes[3] })
+                    arr.push({ title: '<b>容量信息</b>', value: '' })
+                    arr.push({ title: '容量', value: item.size[0] })
+                    arr.push({ title: '已用', value: item.size[1] })
+                    arr.push({ title: '可用', value: item.size[2] })
+                    arr.push({ title: '使用率', value: item.size[3] })
                     obj.masks = arr;
                     data.items.push(obj)
                 }
@@ -446,7 +456,9 @@ var index = {
         })
     },
     check_update: function () {
+    	var _load = bt.load('正在获取更新内容，请稍后...');
         bt.system.check_update(function (rdata) {
+        	_load.close();
             if (rdata.status === false) {
                 if (!rdata.msg.beta) {
                     bt.msg(rdata);

@@ -316,10 +316,7 @@ class crontab:
     #从crond删除
     def remove_for_crond(self,echo):
         u_file = '/var/spool/cron/crontabs/root'
-        if not os.path.exists(u_file):
-            file='/var/spool/cron/root'
-        else:
-            file=u_file
+        file = self.get_cron_file()
         conf=public.readFile(file)
         rep = ".+" + str(echo) + ".+\n"
         conf = re.sub(rep, "", conf)
@@ -346,7 +343,8 @@ class crontab:
                     'site'  :   head + "python " + public.GetConfigValue('setup_path')+"/panel/script/backup.py site "+param['sName']+" "+str(param['save']),
                     'database': head + "python " + public.GetConfigValue('setup_path')+"/panel/script/backup.py database "+param['sName']+" "+str(param['save']),
                     'logs'  :   head + "python " + public.GetConfigValue('setup_path')+"/panel/script/logsBackup "+param['sName']+log+" "+str(param['save']),
-                    'rememory' : head + "/bin/bash " + public.GetConfigValue('setup_path') + '/panel/script/rememory.sh'
+                    'rememory' : head + "/bin/bash " + public.GetConfigValue('setup_path') + '/panel/script/rememory.sh',
+                    'webshell': head + "python " + public.GetConfigValue('setup_path') + '/panel/class/webshell_check.py site ' + param['sName'] +' ' +param['urladdress']
                     }
             if param['backupTo'] != 'localhost':
                 cfile = public.GetConfigValue('setup_path') + "/panel/plugin/" + param['backupTo'] + "/" + param['backupTo'] + "_main.py";
@@ -356,7 +354,8 @@ class crontab:
                     'site'  :   head + "python " + cfile + " site " + param['sName'] + " " + str(param['save']),
                     'database': head + "python " + cfile + " database " + param['sName'] + " " + str(param['save']),
                     'logs'  :   head + "python " + public.GetConfigValue('setup_path')+"/panel/script/logsBackup "+param['sName']+log+" "+str(param['save']),
-                    'rememory' : head + "/bin/bash " + public.GetConfigValue('setup_path') + '/panel/script/rememory.sh'
+                    'rememory' : head + "/bin/bash " + public.GetConfigValue('setup_path') + '/panel/script/rememory.sh',
+                     'webshell': head + "python " + public.GetConfigValue('setup_path') + '/panel/class/webshell_check.py site ' + param['sName'] +' ' +param['urladdress']
                     }
                 
             try:
@@ -405,13 +404,10 @@ echo "--------------------------------------------------------------------------
     #将Shell脚本写到文件
     def WriteShell(self,config):
         u_file = '/var/spool/cron/crontabs/root'
-        if not os.path.exists(u_file):
-            file='/var/spool/cron/root'
-        else:
-            file=u_file
-        
+        file = self.get_cron_file()
         if not os.path.exists(file): public.writeFile(file,'')
         conf = public.readFile(file)
+        if type(conf)==bool:return public.returnMsg(False,'读取文件失败!')
         conf += config + "\n"
         if public.writeFile(file,conf):
             if not os.path.exists(u_file):
@@ -425,9 +421,29 @@ echo "--------------------------------------------------------------------------
     def StartTask(self,get):
         echo = public.M('crontab').where('id=?',(get.id,)).getField('echo');
         execstr = public.GetConfigValue('setup_path') + '/cron/' + echo;
-        os.system('chmod +x ' + execstr)
-        os.system('nohup ' + execstr + ' >> ' + execstr + '.log 2>&1 &');
+        public.ExecShell('chmod +x ' + execstr)
+        public.ExecShell('nohup ' + execstr + ' >> ' + execstr + '.log 2>&1 &');
         return public.returnMsg(True,'CRONTAB_TASK_EXEC')
+
+    #获取计划任务文件位置
+    def get_cron_file(self):
+        u_path = '/var/spool/cron/crontabs'
+        u_file = u_path + '/root'
+        c_file = '/var/spool/cron/root'
+        cron_path = c_file
+        if not os.path.exists(u_path):
+            cron_path=c_file
+        if os.path.exists('/usr/bin/yum'):
+            cron_path = c_file
+        elif os.path.exists("/usr/bin/apt-get"):
+            cron_path = u_file
+
+        if cron_path == u_file:
+            if not os.path.exists(u_path): 
+                os.makedirs(u_path,472)
+                public.ExecShell("chown root:crontab {}".format(u_path))
+        return cron_path
+        
         
     
         

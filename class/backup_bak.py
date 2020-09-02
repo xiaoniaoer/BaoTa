@@ -45,9 +45,9 @@ class backup_bak:
             ret = public.ReadFile(self._check_all_date)
             self._check_date_all_data = json.loads(ret)
         if not os.path.exists('/www/backup/site_backup'):
-            os.system('mkdir /www/backup/site_backup -p')
+            public.ExecShell('mkdir /www/backup/site_backup -p')
         if not os.path.exists('/www/backup/database_backup'):
-            os.system('mkdir /www/backup/database_backup')
+            public.ExecShell('mkdir /www/backup/database_backup')
         if not os.path.exists(self._check_database):
             ret = []
             public.writeFile(self._check_database, json.dumps(ret))
@@ -144,11 +144,96 @@ class backup_bak:
     # 显示所有网站信息
     def get_sites(self,get):
         data= public.M('sites').field('id,name,path,status,ps,addtime,edate').select()
+        for i in data:
+            data2=self.GetSSL(i['name'])
+            i['ssl']=data2['status']
+            if data2['status']:
+                i['time'] = data2['cert_data']
+            else:
+                i['time'] =False
         return data
+
 
     def get_databases(self,get):
         data= public.M('databases').field('id,name,username,password,accept,ps,addtime').select()
         return data
+
+    # 是否跳转到https
+    def IsToHttps(self, siteName):
+        file = self.setupPath + '/panel/vhost/nginx/' + siteName + '.conf';
+        conf = public.readFile(file);
+        if conf:
+            if conf.find('HTTP_TO_HTTPS_START') != -1: return True;
+            if conf.find('$server_port !~ 443') != -1: return True;
+        return False;
+
+    # 取SSL状态
+    def GetSSL(self, siteName):
+        self.setupPath = '/www/server'
+        path = os.path.join('/www/server/panel/vhost/cert/', siteName)
+        if not os.path.isfile(os.path.join(path, "fullchain.pem")) and not os.path.isfile(os.path.join(path, "privkey.pem")):
+            path = os.path.join('/etc/letsencrypt/live/', siteName)
+        type = 0;
+        if os.path.exists(path + '/README'):  type = 1;
+        if os.path.exists(path + '/partnerOrderId'):  type = 2;
+        csrpath = path + "/fullchain.pem";  # 生成证书路径
+        keypath = path + "/privkey.pem";  # 密钥文件路径
+        key = public.readFile(keypath);
+        csr = public.readFile(csrpath);
+        file = self.setupPath + '/panel/vhost/' + public.get_webserver() + '/' + siteName + '.conf';
+        conf = public.readFile(file);
+        keyText = 'SSLCertificateFile'
+        if public.get_webserver() == 'nginx': keyText = 'ssl_certificate';
+        status = True
+        if (conf.find(keyText) == -1):
+            status = False
+            type = -1
+        toHttps = self.IsToHttps(siteName)
+        id = public.M('sites').where("name=?", (siteName,)).getField('id')
+        domains = public.M('domain').where("pid=?", (id,)).field('name').select()
+        cert_data= {}
+        if csr:
+            cert_data = self.GetCertName(csrpath)
+        email = public.M('users').where('id=?',(1,)).getField('email')
+        if email == '287962566@qq.com': email = ''
+        return {'status': status, 'cert_data':cert_data}
+
+    #转换时间
+    def strfToTime(self,sdate):
+        import time
+        return time.strftime('%Y-%m-%d',time.strptime(sdate,'%b %d %H:%M:%S %Y %Z'))
+
+    #获取证书名称
+    def GetCertName(self,certPath):
+        try:
+            openssl = '/usr/local/openssl/bin/openssl';
+            if not os.path.exists(openssl): openssl = 'openssl';
+            result = public.ExecShell(openssl + " x509 -in "+certPath+" -noout -subject -enddate -startdate -issuer")
+            tmp = result[0].split("\n");
+            data = {}
+            data['subject'] = tmp[0].split('=')[-1]
+            data['notAfter'] = self.strfToTime(tmp[1].split('=')[1])
+            data['notBefore'] = self.strfToTime(tmp[2].split('=')[1])
+            if tmp[3].find('O=') == -1:
+                data['issuer'] = tmp[3].split('CN=')[-1]
+            else:
+                data['issuer'] = tmp[3].split('O=')[-1].split(',')[0]
+            if data['issuer'].find('/') != -1: data['issuer'] = data['issuer'].split('/')[0];
+            result = public.ExecShell(openssl + " x509 -in "+certPath+" -noout -text|grep DNS")
+            data['dns'] = result[0].replace('DNS:','').replace(' ','').strip().split(',');
+            return data;
+        except:
+            print(public.get_error_info())
+            return None;
+
+
+    # 显示所有网站信息
+    def get_sites_or_ssl(self,get):
+        data= public.M('sites').field('id,name,path,status,ps,addtime,edate').select()
+        for i in data:
+            i['ssl']=self.GetSSL(i['name'])
+        return data
+
 
     #backup_database
     def backup_database(self,get):
@@ -157,7 +242,7 @@ class backup_bak:
         if not id:return public.returnMsg(False,'数据库不存在')
         if os.path.exists(self._chek_site_file):
             return public.returnMsg(False, '这个时间段中存在有运行任务,建议更换计划任务的时间备份')
-        os.system('python /www/server/panel/class/backup_bak.py database %s &'%id)
+        public.ExecShell('python /www/server/panel/class/backup_bak.py database %s &'%id)
         return public.returnMsg(True,'OK')
 
     # backup_database
@@ -171,13 +256,13 @@ class backup_bak:
             return public.returnMsg(False, '这个时间段中存在有运行任务,建议更换计划任务的时间备份')
 
 
-        os.system('python /www/server/panel/class/backup_bak.py sites %s &' % id)
+        public.ExecShell('python /www/server/panel/class/backup_bak.py sites %s &' % id)
         return public.returnMsg(True, 'OK')
 
     # backup_path
     def backup_path_data(self, get):
         if not os.path.exists(get.path):return public.returnMsg(False, "目录不存在")
-        os.system('python /www/server/panel/class/backup_bak.py path %s &' % get.path)
+        public.ExecShell('python /www/server/panel/class/backup_bak.py path %s &' % get.path)
         return public.returnMsg(True, 'OK')
 
     #检测数据库执行错误
@@ -192,8 +277,8 @@ class backup_bak:
 
     #配置
     def mypass(self,act,root):
-        os.system("sed -i '/user=root/d' /etc/my.cnf")
-        os.system("sed -i '/password=/d' /etc/my.cnf")
+        public.ExecShell("sed -i '/user=root/d' /etc/my.cnf")
+        public.ExecShell("sed -i '/password=/d' /etc/my.cnf")
         if act:
             mycnf = public.readFile('/etc/my.cnf');
             rep = "\[mysqldump\]\nuser=root"
@@ -221,7 +306,7 @@ class backup_bak:
         ret['path']=False
         ret['chekc'] = True
         self.set_database_data(ret)
-        if not os.path.exists(self._chek_site_file): os.system('touch %s' % self._chek_site_file)
+        if not os.path.exists(self._chek_site_file): public.ExecShell('touch %s' % self._chek_site_file)
         path=self.backup_database_data(id)
         os.remove(self._chek_site_file)
 
@@ -273,7 +358,7 @@ class backup_bak:
         ret['path']=False
         ret['chekc'] = True
         self.set_site_data(ret)
-        if not os.path.exists(self._chek_site_file): os.system('touch %s' % self._chek_site_file)
+        if not os.path.exists(self._chek_site_file): public.ExecShell('touch %s' % self._chek_site_file)
         path=self.backup_site_data(id)
         os.remove(self._chek_site_file)
         ret['status'] = True
@@ -288,7 +373,7 @@ class backup_bak:
         if isError: return isError
         name = public.M('databases').where("id=?", (id,)).getField('name')
         root = public.M('config').where('id=?', (1,)).getField('mysql_root')
-        if not os.path.exists('/www/server/panel/BTPanel/static' + '/database'): os.system(
+        if not os.path.exists('/www/server/panel/BTPanel/static' + '/database'): public.ExecShell(
             'mkdir -p ' + '/www/server/panel/BTPanel/static' + '/database');
         self.mypass(True, root)
         path_id = ''.join(random.sample(string.ascii_letters + string.digits, 20))
@@ -400,7 +485,7 @@ class backup_bak:
         ret['status']=False
         self.set_down_data(ret)
         print('python /www/server/panel/class/backup_bak.py down  %s %s %s %s %s &'%(get.url,filename,get.type,get.id,get.name))
-        os.system('python /www/server/panel/class/backup_bak.py down  %s %s %s %s %s &'%(get.url,filename,get.type,get.id,get.name))
+        public.ExecShell('python /www/server/panel/class/backup_bak.py down  %s %s %s %s %s &'%(get.url,filename,get.type,get.id,get.name))
         return True
 
     def down2(self,url,filename,type,id,name):
@@ -439,7 +524,7 @@ class backup_bak:
         if os.path.exists(self._chek_site_file):
             return public.returnMsg(False, '这个时间段中存在有运行任务,建议更换计划任务的时间备份')
 
-        os.system('python /www/server/panel/class/backup_bak.py sites_ALL 11 &')
+        public.ExecShell('python /www/server/panel/class/backup_bak.py sites_ALL 11 &')
         return public.returnMsg(True, 'OK')
 
     def set_backup_all(self):
@@ -451,7 +536,7 @@ class backup_bak:
         jindu['end_count']=0
         jindu['resulit']=site_list
         public.writeFile(self._check_all_site, json.dumps(jindu))
-        if not os.path.exists(self._chek_site_file): os.system('touch %s' % self._chek_site_file)
+        if not os.path.exists(self._chek_site_file): public.ExecShell('touch %s' % self._chek_site_file)
         for i in data:
             path = self.backup_site_data(i['id'])
             if path:
@@ -475,7 +560,7 @@ class backup_bak:
     def backup_date_all(self, get):
         if os.path.exists(self._chek_site_file):
             return public.returnMsg(False, '这个时间段中存在有运行任务,建议更换计划任务的时间备份')
-        os.system('python /www/server/panel/class/backup_bak.py database_ALL 11 &')
+        public.ExecShell('python /www/server/panel/class/backup_bak.py database_ALL 11 &')
         return public.returnMsg(True, 'OK')
 
     def backup_all_database(self):
@@ -487,7 +572,7 @@ class backup_bak:
         jindu['end_count']=0
         jindu['resulit']=site_list
         public.writeFile(self._check_all_date, json.dumps(jindu))
-        if not os.path.exists(self._chek_site_file): os.system('touch %s' % self._chek_site_file)
+        if not os.path.exists(self._chek_site_file): public.ExecShell('touch %s' % self._chek_site_file)
         for i in data:
             path = self.backup_database_data(i['id'])
             if path:
